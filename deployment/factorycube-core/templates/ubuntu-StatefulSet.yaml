@@ -1,0 +1,36 @@
+{{- if .Values.ubuntu.enabled -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "factorycube-core.fullname" . }}-ubuntu
+  labels:
+    {{- include "factorycube-core.labels.ubuntu" . | nindent 4 }}
+spec:
+  serviceName: {{ include "factorycube-core.fullname" . }}-ubuntu
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "factorycube-core.labels.ubuntu" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "factorycube-core.labels.ubuntu" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ include "factorycube-core.fullname" . }}-ubuntu
+        image: unitedmanufacturinghub/ubuntu-docker:{{ .Values.ubuntu.tag }}
+        securityContext:
+          privileged: true
+        command:
+          - "sleep"
+          - "31449600"
+        volumeMounts:
+        - name: {{ include "factorycube-core.fullname" . }}-ubuntu-data
+          mountPath: /data
+      volumes:
+      - name: {{ include "factorycube-core.fullname" . }}-ubuntu-data
+        persistentVolumeClaim:
+          claimName: {{ include "factorycube-core.fullname" . }}-ubuntu-claim
+
+{{- end }}

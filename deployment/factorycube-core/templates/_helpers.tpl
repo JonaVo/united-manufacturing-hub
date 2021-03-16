@@ -53,6 +53,14 @@ app.kubernetes.io/name: {{ include "factorycube-core.name" . }}-mqttbridge
 {{- end }}
 
 {{/*
+Labels for ubuntu 
+*/}}
+{{- define "factorycube-core.labels.ubuntu" -}}
+app.kubernetes.io/name: {{ include "factorycube-core.name" . }}-ubuntu
+{{ include "factorycube-core.labels.common" . }}
+{{- end }}
+
+{{/*
 Labels for nodered
 */}}
 {{- define "factorycube-core.labels.nodered" -}}

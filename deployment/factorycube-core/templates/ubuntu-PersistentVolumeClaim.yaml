@@ -1,0 +1,17 @@
+
+{{- if .Values.ubuntu.enabled -}}
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "factorycube-core.fullname" . }}-ubuntu-claim
+  labels:
+    {{- include "factorycube-core.labels.ubuntu" . | nindent 4 }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.ubuntu.storageRequest }}
+
+{{- end }}

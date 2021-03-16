@@ -33,6 +33,14 @@ sensorconnect:
   brokerURL: "factorycube-core-emqxedge-headless" # do not change, points to emqxedge i
   brokerPort: 1883 # do not change
 
+### ubuntu ###
+
+ubuntu:
+  enabled: true
+  tag: development 
+  storageRequest: 8Gi
+  port: 80
+
 ### nodered ###
 
 nodered:
