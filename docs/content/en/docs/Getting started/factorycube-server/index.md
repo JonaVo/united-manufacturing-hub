@@ -17,7 +17,7 @@ Please check out the notes for [using it in development installations](#notes-fo
 
 1. Clone repository (in the future: add helm repo)
 2. Configure values.yaml according to your needs. For help in configuring you can take a look into the respective documentation of the subcharts ([Grafana](https://github.com/grafana/helm-charts), [redis](https://github.com/bitnami/charts/tree/master/bitnami/redis), [timescaleDB](https://github.com/timescale/timescaledb-kubernetes/tree/master/charts/timescaledb-single), [verneMQ](https://github.com/vernemq/docker-vernemq/tree/master/helm/vernemq)) or into the documentation of the subcomponents ([factoryinsight](../../developers/factorycube-server/factoryinsight), [mqtt-to-postgresql](../../developers/factorycube-server/mqtt-to-postgresql))
-3. Execute `helm install factorycube-server .` and wait. Helm will automatically install the entire stack across multiple node. It can take up to several minutes until everything is setup. 
+3. Execute `helm install factorycube-server . --kubeconfig /etc/rancher/k3s/k3s.yaml` and wait. Helm will automatically install the entire stack across multiple node. It can take up to several minutes until everything is setup. 
 
 Everything should be now successfully setup and you can connect your edge devices and start creating dashboards! **Keep in mind**: the default values.yaml should only be used for development environments and never for production. See also notes below.
 
