@@ -8,6 +8,7 @@ Provided classes:
 
 # Import python in-built libraries
 import json
+import logging
 import sys
 import time
 
@@ -24,20 +25,21 @@ class MqttTrigger:
     The method disconnect() disconnects from MQTT broker.
 
     Args of constructor:
-        cam[Cognex/GenICam]:    A configured camera ready to
-                                get an image. get_image() function
-                                must be provided by object
-        interface[string]:      Camera interface that is used
+        cam [GenICam/DummyCamera]:
+                                    A configured camera ready to
+                                    get an image. get_image() function
+                                    must be provided by object
+        interface[string]:          Camera interface that is used
         acquisition_delay[float]:
-                                Delay between trigger and 
-                                acquisition
-        mqtt_host[string]:      Hostname or IP address of the MQTT
-                                broker
-        mqtt_port[int]:         Network mqtt_port of the server
-                                mqtt_host to connect to
-        mqtt_topic[string]:     Topic on MQTT Broker where trigger
-                                signal to save an image is send to
-                                (e.g. "test/trigger/")
+                                    Delay between trigger and
+                                    acquisition
+        mqtt_host[string]:          Hostname or IP address of the MQTT
+                                    broker
+        mqtt_port[int]:             Network mqtt_port of the server
+                                    mqtt_host to connect to
+        mqtt_topic[string]:         Topic on MQTT Broker where trigger
+                                    signal to save an image is send to
+                                    (e.g. "test/trigger/")
 
     Returns of constructor:
         A connected instance of MqttTrigger
@@ -63,17 +65,20 @@ class MqttTrigger:
 
         # Connect to the Broker
         self.client = mqtt.Client()
-        self.client.connect(self.mqtt_host, self.mqtt_port) 
-        # Start the loop to be always able to receive messages 
-        #   from broker
+        self.client.connect(self.mqtt_host, self.mqtt_port)
         
         # Tests 10.04.2021
         self.client.on_subscribe = lambda client, userdata, mid, granted_qos: print("Subscribed to topic: {}".format(self.mqtt_topic))
-        
+
+        # loop method: reads the receive and send buffers, and process any messages it finds
+        # starts a new thread, that calls the loop method at regular intervals
+        # re-connects automatically.
         self.client.loop_start()
+
         # Subscribe to the given mqtt_topic
         self.client.subscribe(self.mqtt_topic)
         print("Subscribed for input to topic: " + str(self.mqtt_topic))
+
         # Call the _on_message when message is received from broker
         self.client.on_message = self._on_message
 
@@ -84,6 +89,17 @@ class MqttTrigger:
         Message must be a encoded json!
 
         Gets a new image with the cam object.
+
+        Their are four options to adjust the time at which the image will be taken.
+        1. The Trigger MQTT message does not contain the key "timestamp_ms" AND acquisition_delay is 0
+            -> image gets taken without hesitation
+        2. The Trigger MQTT message does not contain the key "timestamp_ms" AND acquisition_delay is bigger than 0
+            -> image gets taken after waiting until the acquisition delay is over
+        3. The Trigger MQTT message does  contain the key "timestamp_ms" AND acquisition_delay is 0
+            -> image gets taken at the given timestamp, if this timestamps lies in the past, an error the system exits
+        4. The Trigger MQTT message does  contain the key "timestamp_ms" AND acquisition_delay is bigger than 0
+            -> image gets taken at the given timestamp PLUS the given acqisition time, if the result lies in the past, an error the system exits
+
 
         Args:
             client:         client instance for this callback
@@ -107,6 +123,10 @@ class MqttTrigger:
         message = json.loads(msg.payload)   
         print("Image acquisition trigger received")
 
+        if 'timestamp_ms' in message and int(message['timestamp_ms'])<round(time.time() * 1000)
+            logging.error("The given timestamp lies in the past.")
+            sys.exit("The given timestamp lies in the past. Therefore image cannot be taken at the given timestamp. || Increase ACQUISITION_DELAY or send a more recent timestamp")
+
         # If no acquisition delay skip the following
         if self.acquisition_delay > 0.0:        
             # Check if timestamp in ms is provided in message. Then
@@ -118,7 +138,8 @@ class MqttTrigger:
         # If no acquisition delay skip the following
         if self.acquisition_delay > 0.0:
             if time_to_get_image < round(time.time() * 1000):
-                sys.exit("Environment Error: ACQUISITION_DELAY to short ||| Set acquisition delay is shorter than the processing time.")
+                logging.error("Environment Error: ACQUISITION_DELAY too short")
+                sys.exit("Environment Error: ACQUISITION_DELAY too short||| Set acquisition delay is shorter than the processing time or sent timestamp lies too far in the past.")
             while time_to_get_image > round(time.time() * 1000):# Get an image 
                 # Avoid CPU overloading
                 time.sleep(0.1)
@@ -150,12 +171,13 @@ class ContinuousTrigger:
     instance.
 
     Args of constructor:
-        cam[Cognex/GenICam]:    A configurated camera ready to 
-                                get an image. get_image() function
-                                must be provided by object
-        interface[string]:      Camera interface that is used
-        cycle_time[float]:      Time between each image acqui-
-                                sition in seconds
+        cam[GenICam/DummyCamera]:
+                                    A configurated camera ready to
+                                    get an image. get_image() function
+                                    must be provided by object
+        interface[string]:          Camera interface that is used
+        cycle_time[float]:          Time between each image acqui-
+                                    sition in seconds
 
     Returns of constructor:
         Continuous triggering instance in which the process will
@@ -191,6 +213,7 @@ class ContinuousTrigger:
             # If the processing time is longer than the cycle 
             #   time throw error
             if loop_time > self.cycle_time:
+                logging.error("Cycle time shorter than time needed to acquire an image.")
                 sys.exit("Environment Error: CYCLE_TIME to short ||| Set cycle time is shorter than the processing time for each image.")
             else:
                 # Sleep for difference of cycle time minus loop 
