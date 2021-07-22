@@ -2,10 +2,11 @@
 Main script that is executed insight the docker container.
 It imports the required libraries and self-written modules
 as well as the environment variables. The defintion of the 
-environment variables can be found in the env-file. 
+environment variables can be found on
+https://docs.umh.app/docs/developers/factorycube-edge/cameraconnect/
 
 Depending on the settings of the environment variables,
-objects of classes are intantiated which provides all 
+objects of classes are instantiated which provides all
 necessary connections and functionalities. To find out 
 more about the classes take a look into the imported 
 modules. If there is not a while-loop already provided by
@@ -36,18 +37,18 @@ MACHINE_ID = os.environ.get('MACHINE_ID')
 
 ### LOAD OVERALL SETTINGS
 ## MQTT SETTINGS
-MQTT_HOST = os.environ.get('MQTT_HOST')
-MQTT_PORT = int(os.environ.get('MQTT_PORT', 1883))
+MQTT_HOST = os.environ.get('MQTT_HOST') #approved
+MQTT_PORT = int(os.environ.get('MQTT_PORT', 1883)) #approved
 
 ## TRIGGER & PROCESS SETTINGS
-TRIGGER = os.environ.get('TRIGGER')
-ACQUISITION_DELAY = float(os.environ.get('ACQUISITION_DELAY', 0.0))
-CYCLE_TIME = float(os.environ.get('CYCLE_TIME', 10.0))
+TRIGGER = os.environ.get('TRIGGER') #approved
+ACQUISITION_DELAY = float(os.environ.get('ACQUISITION_DELAY', 0.0)) #approved
+CYCLE_TIME = float(os.environ.get('CYCLE_TIME', 10.0)) #approved
 
 ## CAMERA SETTINGS
-CAMERA_INTERFACE = os.environ.get('CAMERA_INTERFACE')
-SERIAL_NUMBER = os.environ.get('SERIAL_NUMBER','')
-TRANSMITTER_ID = os.environ.get('CUBE_TRANSMITTERID','')
+CAMERA_INTERFACE = os.environ.get('CAMERA_INTERFACE') #approved
+SERIAL_NUMBER = os.environ.get('SERIAL_NUMBER', '') #approved
+TRANSMITTER_ID = os.environ.get('CUBE_TRANSMITTERID', '') #approved
 
 MQTT_TOPIC_TRIGGER = "ia/trigger/"+TRANSMITTER_ID+"/"+SERIAL_NUMBER
 MQTT_TOPIC_IMAGE = "ia/rawImage/"+TRANSMITTER_ID+"/"+SERIAL_NUMBER
@@ -85,25 +86,25 @@ if __name__ == "__main__":
     elif LOGGING_LEVEL == "CRITICAL":
         logging.basicConfig(level=logging.CRITICAL)
 
-    #detect available cti files as camera producers
+    # detect available cti files as camera producers
     cti_file_list = []
     for name in glob.glob(str(DEFAULT_GENTL_PRODUCER_PATH)+'/**/*.cti', recursive=True):
 
         cti_file_list.append(str(name))
 
-    #if no cti files are found, log error and exit program
+    # if no cti files are found, log error and exit program
     if len(cti_file_list)==0:
-        logging.error("No producer file discovered")
-        exit(1)
+        logging.error("No GenTL producer file discovered")
+        sys.exit(1)
 
-
-    # Check selected camera interface
+    # Check selected camera interface and build object of corresponding camera
     if CAMERA_INTERFACE == "DummyCamera":
         cam = DummyCamera(MQTT_HOST, MQTT_PORT, MQTT_TOPIC_IMAGE, 0, image_storage_path=IMAGE_PATH)
     elif CAMERA_INTERFACE == "GenICam":
         cam = GenICam(MQTT_HOST,MQTT_PORT,MQTT_TOPIC_IMAGE,SERIAL_NUMBER, cti_file_list, image_width=IMAGE_WIDTH, image_height=IMAGE_HEIGHT, pixel_format=PIXEL_FORMAT, image_storage_path=IMAGE_PATH)
     else: 
         # Stop system, not possible to run with this settings
+        logging.error("Environment Error: CAMERA_INTERFACE not supported")
         sys.exit("Environment Error: CAMERA_INTERFACE not supported ||| Make sure to set a value that is allowed according to the specified possible values for this environment variable and make sure the spelling is correct.")
 
     # Check trigger type and use appropriate instance of the
@@ -112,8 +113,7 @@ if __name__ == "__main__":
         # Never jumps out of the processes of the instance
         ContinuousTrigger(cam,CAMERA_INTERFACE,CYCLE_TIME) 
     elif TRIGGER == "MQTT":
-        # Starts an asynchroneous process for working with 
-        #   the received mqtt data
+        # Starts an asynchronous process for working with the received mqtt data
         trigger = MqttTrigger(cam,CAMERA_INTERFACE,ACQUISITION_DELAY,MQTT_HOST,MQTT_PORT,MQTT_TOPIC_TRIGGER) 
 
         # Run forever to stay connected 
@@ -123,4 +123,5 @@ if __name__ == "__main__":
             print("Still running.")
     else:
         # Stop system, not possible to run with this setting
+        logging.error("Environment Error: TRIGGER not supported")
         sys.exit("Environment Error: TRIGGER not supported ||| Make sure to set a value that is allowed according to the specified possible values for this environment variable and make sure the spelling is correct.")
