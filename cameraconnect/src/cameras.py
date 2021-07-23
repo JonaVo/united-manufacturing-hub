@@ -136,7 +136,7 @@ class CamGeneral(ABC):
             'timestamp_ms': str(timestamp_image_acquisition),
             'image':
                 {
-                    'image_id': str(serial_number_camera)+str(timestamp_image_acquisition),
+                    'image_id': str(serial_number_camera)+"_"+str(timestamp_image_acquisition),
                     'image_bytes': encoded_image,
                     'image_height': image.shape[0],
                     'image_width': image.shape[1],
@@ -399,6 +399,7 @@ class GenICam(CamGeneral):
         self.h.update()
         # If no remote devices in the list that you can control
         if len(self.h.device_info_list) == 0:
+            logging.error("No compatible devices detected.")
             sys.exit("No compatible devices detected.")
         # Show remote devices in list
         print("Available devices List: ", self.h.device_info_list)
@@ -672,7 +673,7 @@ class DummyCamera(CamGeneral):
                                      dtype=np.uint8,
                                      shape=(height, width, channels))
 
-        self._publish_mqtt(retrieved_image, timestamp_image_acquisition, self.serial_number)
+        self._publish_mqtt(retrieved_image, timestamp_image_acquisition, "00000000")
         print("Image converted and published to MQTT.")
 
         # Save image
