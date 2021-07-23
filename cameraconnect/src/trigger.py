@@ -123,7 +123,7 @@ class MqttTrigger:
         message = json.loads(msg.payload)   
         print("Image acquisition trigger received")
 
-        if 'timestamp_ms' in message and int(message['timestamp_ms'])<round(time.time() * 1000)
+        if "timestamp_ms" in message and int(message['timestamp_ms'])<round(time.time() * 1000):
             logging.error("The given timestamp lies in the past.")
             sys.exit("The given timestamp lies in the past. Therefore image cannot be taken at the given timestamp. || Increase ACQUISITION_DELAY or send a more recent timestamp")
 
