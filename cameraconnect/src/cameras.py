@@ -32,19 +32,21 @@ from harvesters.core import Harvester
 
 class CamGeneral(ABC):
     """
-    Abstract base clase for the different cameras. 
+    Abstract base class for the different cameras.
     This class defines only the basic constructor, the 
     method _publish_mqtt() to publish the results to the MQTT 
     broker, the method disconnect() and the abstract method 
     get_image(). Children must define the get_image() method.
 
     Args of constructor:
-        mqtt_host[string]:      Hostname or IP address of the MQTT broker
-        mqtt_port[int]:         Network port of the server host to connect to 
-        mqtt_topic[string]:     Topic on MQTT Broker where trigger signal is send to 
-                                (e.g. "test/trigger/")
-        serial_number[string]:  Serial number of the camera set 
-                                by user
+        mqtt_host[string]:              Hostname or IP address of the MQTT broker
+        mqtt_port[int]:                 Network port of the server host to connect to
+        mqtt_topic[string]:             Topic on MQTT Broker where trigger signal is send to
+                                        (e.g. "test/trigger/")
+        serial_number[string]:          Serial number of the camera set
+                                        by user
+        image_storage_path [string]:    directory in which the images gets stored inside the docker
+                                        if empty, no images get stored
 
     Returns of constructor:
         See inheritors
@@ -72,9 +74,13 @@ class CamGeneral(ABC):
         self.client = mqtt.Client()
         self.client.connect(self.mqtt_host, self.mqtt_port)
         print("Connected to MQTT broker.")
+
+        # loop method: reads the receive and send buffers, and process any messages it finds
+        # starts a new thread, that calls the loop method at regular intervals
+        # re-connects automatically.
         self.client.loop_start()
 
-    def _publish_mqtt(self, image) -> None:
+    def _publish_mqtt(self, image, timestamp_image_acquisition, serial_number_camera) -> None:
         """
         Sends the timestamp of the time at at which the image was
         taken, and the image itself to the MQTT broker.
@@ -82,10 +88,12 @@ class CamGeneral(ABC):
         converted from a numpy array into a byte array and from 
         a byte array into a string.
 
-        The MQTT message contains in one json: 
-            - serial number of the camera
+        The MQTT message contains in one json:
             - timestamp of the acquisition time in ms since epoch
             - image information:
+                - image_id consisting of serial number of camera
+                    and timestamp with an underscore in between
+                    (image_id=<serial_number_camera>_<timestamp>)
                 - string containing the image data (image_bytes)
                 - image height, width and channels
         
@@ -93,7 +101,8 @@ class CamGeneral(ABC):
             {
             'timestamp_ms': timestamp_ms,
             'image': 
-                    {'image_bytes': encoded_image,
+                    {'image_id' : <serial_number_camera>_<timestamp>,
+                    'image_bytes': encoded_image,
                     'image_height': image.shape[0],
                     'image_width': image.shape[1],
                     'image_channels':image.shape[2]},
@@ -101,20 +110,21 @@ class CamGeneral(ABC):
 
 
         Args:
-            image[np.ndarray]:      Array of image in BGR color 
-                                    format with array size 
-                                    N x M x image_channels 
-                                    where N is height, M is width
-                                    and image channels the number
-                                    of bytes per pixel
+            image[np.ndarray]:              Array of image in BGR color
+                                            format with array size
+                                            N x M x image_channels
+                                            where N is height, M is width
+                                            and image channels the number
+                                            of bytes per pixel
+            timestamp_image_acquisition     timestamp of the moment,
+                                            the image was acquired
+                                            format: UNIX timestamp in ms
+            serial_number_camera:           Serial number of the camera
+                                            which was used to take the image
             
         Returns:
             None
         """
-        # Get timestamp of time  when trigger was received. 
-        #   Measured in ms since epoch. Epoch is defined as 
-        #   January 1, 1970, 00:00:00 (UTC)
-        timestamp_ms = int(round(time.time() * 1000))
 
         # Encode numpy array in byte array
         # Use decode() to convert the bytes to a string to send them in a json message
@@ -123,17 +133,19 @@ class CamGeneral(ABC):
         encoded_image = base64.b64encode(im_bytes).decode()
         # Preparation of the message that will be published
         prepared_message = {
-            'timestamp_ms': str(timestamp_ms),
+            'timestamp_ms': str(timestamp_image_acquisition),
             'image':
-                {'image_bytes': encoded_image,
-                 'image_height': image.shape[0],
-                 'image_width': image.shape[1],
-                 'image_channels': image.shape[2]},
+                {
+                    'image_id': str(serial_number_camera)+str(timestamp_image_acquisition),
+                    'image_bytes': encoded_image,
+                    'image_height': image.shape[0],
+                    'image_width': image.shape[1],
+                    'image_channels': image.shape[2]
+                 },
         }
 
         # Get json formatted string, convert python object into 
         #   json object
-        #print (prepared_message)
         message = json.dumps(prepared_message)
         # Publish the message
         ret = self.client.publish(self.mqtt_topic, message, qos=0)
@@ -373,9 +385,7 @@ class GenICam(CamGeneral):
         # Instantiate a Harvester object to use harvesters core
         self.h = Harvester()
 
-        # Add path of GenTL Producer 
-        #self.h.add_file(self.genTL_producer_path)
-
+        # Add path of GenTL Producer
         for path in self.genTL_producer_path_list:
             self.h.add_file(path)
 
@@ -596,12 +606,14 @@ class GenICam(CamGeneral):
                                              dtype=np.uint8,
                                              shape=(component.height, component.width, self.image_channels))
 
+                timestamp_image_acquisition = int(round(time.time() * 1000))
+
                 # Adjust the order of red, blue and green color 
                 #   to BGR which is default in opencv
                 if data_format == "RGB8":
                     retrieved_image = cv2.cvtColor(retrieved_image, cv2.COLOR_RGB2BGR)
 
-            self._publish_mqtt(retrieved_image)
+            self._publish_mqtt(retrieved_image, timestamp_image_acquisition, self.serial_number)
             print("Image converted and published to MQTT.")
 
             # Save image
@@ -614,10 +626,10 @@ class GenICam(CamGeneral):
 
                 print("Image saved to {}".format(img_save_dir))
 
-        # If TimeoutException because no image was fetchable, 
+        # If TimeoutException because no image was retrievable,
         #   restart the acquisition process
         except TimeoutException:
-            print("Timeout ocurred during fetching an image. Camera reset and restart.")
+            print("Timeout occurred during fetching an image. Camera reset and restart.")
             self.ia.destroy()
             self.h.reset()
             self._connect()
@@ -654,12 +666,13 @@ class DummyCamera(CamGeneral):
 
         #reads a static image which is part of stack
         img = cv2.imread("/app/assets/dummy_image.jpg")
+        timestamp_image_acquisition = int(round(time.time() * 1000))
         height, width, channels = img.shape
         retrieved_image = np.ndarray(buffer=img,
                                      dtype=np.uint8,
                                      shape=(height, width, channels))
 
-        self._publish_mqtt(retrieved_image)
+        self._publish_mqtt(retrieved_image, timestamp_image_acquisition, self.serial_number)
         print("Image converted and published to MQTT.")
 
         # Save image
